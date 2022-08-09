@@ -18,6 +18,8 @@ import info.nightscout.shared.logging.LTag
 import info.nightscout.androidaps.receivers.DataWorker
 import info.nightscout.androidaps.receivers.Intents
 import info.nightscout.androidaps.interfaces.ResourceHelper
+import info.nightscout.androidaps.utils.XDripBroadcast
+import info.nightscout.shared.sharedPreferences.SP
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -25,7 +27,8 @@ import javax.inject.Singleton
 class XdripPlugin @Inject constructor(
     injector: HasAndroidInjector,
     rh: ResourceHelper,
-    aapsLogger: AAPSLogger
+    aapsLogger: AAPSLogger,
+    private val sp: SP
 ) : PluginBase(PluginDescription()
     .mainType(PluginType.BGSOURCE)
     .fragmentClass(BGSourceFragment::class.java.name)
@@ -38,7 +41,8 @@ class XdripPlugin @Inject constructor(
     private var advancedFiltering = false
     override var sensorBatteryLevel = -1
 
-    override fun shouldUploadToNs(glucoseValue: GlucoseValue): Boolean  = false
+    override fun shouldUploadToNs(glucoseValue: GlucoseValue): Boolean  =
+        glucoseValue.sourceSensor == GlucoseValue.SourceSensor.XDRIP_BRIDGE && sp.getBoolean(R.string.key_dexcomg5_nsupload, false)
 
     override fun advancedFilteringSupported(): Boolean {
         return advancedFiltering
@@ -51,7 +55,8 @@ class XdripPlugin @Inject constructor(
             GlucoseValue.SourceSensor.DEXCOM_G5_NATIVE,
             GlucoseValue.SourceSensor.DEXCOM_G6_NATIVE_XDRIP,
             GlucoseValue.SourceSensor.DEXCOM_G5_NATIVE_XDRIP,
-            GlucoseValue.SourceSensor.DEXCOM_G6_G5_NATIVE_XDRIP
+            GlucoseValue.SourceSensor.DEXCOM_G6_G5_NATIVE_XDRIP,
+            GlucoseValue.SourceSensor.XDRIP_BRIDGE,
         ).any { it == glucoseValue.sourceSensor }
     }
 
@@ -65,6 +70,7 @@ class XdripPlugin @Inject constructor(
         @Inject lateinit var xdripPlugin: XdripPlugin
         @Inject lateinit var repository: AppRepository
         @Inject lateinit var dataWorker: DataWorker
+        @Inject lateinit var xDripBroadcast: XDripBroadcast
 
         init {
             (context.applicationContext as HasAndroidInjector).androidInjector().inject(this)
@@ -85,8 +91,7 @@ class XdripPlugin @Inject constructor(
                 raw = bundle.getDouble(Intents.EXTRA_RAW, 0.0),
                 noise = null,
                 trendArrow = GlucoseValue.TrendArrow.fromString(bundle.getString(Intents.EXTRA_BG_SLOPE_NAME)),
-                sourceSensor = GlucoseValue.SourceSensor.fromString(bundle.getString(Intents.XDRIP_DATA_SOURCE_DESCRIPTION)
-                    ?: "")
+                sourceSensor = GlucoseValue.SourceSensor.XDRIP_BRIDGE //GlucoseValue.SourceSensor.fromString(bundle.getString(Intents.XDRIP_DATA_SOURCE_DESCRIPTION) ?: "")
             )
             repository.runTransactionForResult(CgmSourceTransaction(glucoseValues, emptyList(), null))
                 .doOnError {
@@ -96,7 +101,7 @@ class XdripPlugin @Inject constructor(
                 .blockingGet()
                 .also { savedValues ->
                     savedValues.all().forEach {
-                        xdripPlugin.detectSource(it)
+                        xDripBroadcast.send(it) //xdripPlugin.detectSource(GlucoseValue.sourceSensor)//it)
                         aapsLogger.debug(LTag.DATABASE, "Inserted bg $it")
                     }
                 }

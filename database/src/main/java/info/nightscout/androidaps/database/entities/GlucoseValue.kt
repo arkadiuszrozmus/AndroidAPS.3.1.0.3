@@ -114,6 +114,7 @@ data class GlucoseValue(
         AIDEX("GlucoRx Aidex"),
         RANDOM("Random"),
         UNKNOWN("Unknown"),
+        XDRIP_BRIDGE("xDrip-Bridge"),
 
         IOB_PREDICTION("IOBPrediction"),
         A_COB_PREDICTION("aCOBPrediction"),
